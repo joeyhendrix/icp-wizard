@@ -12,18 +12,26 @@ export default function Page() {
   const [final, setFinal] = useState<{ md?: string; json?: string; companies?: string; people?: string }>({});
 
   async function send(finalize = false) {
-    if (busy) return;
-    setBusy(true);
+  if (busy) return;
+  setBusy(true);
+  try {
     const res = await fetch("/api/icp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ history, finalize })
     });
-    const { text } = await res.json();
 
+    const data = await res.json();
+    if (!res.ok) {
+      setHistory(h => [...h, { role: "assistant", content: `Error: ${data.error || "Server error"}` }]);
+      setBusy(false);
+      return;
+    }
+
+    const text = data.text || "";
     if (finalize) {
-      const md = pull(text, "---MARKDOWN---", "---JSON---");
-      const json = pull(text, "---JSON---", "---CSV_COMPANIES---");
+      const md = pull(text, "---MARKDOWN---",      "---JSON---");
+      const json = pull(text, "---JSON---",          "---CSV_COMPANIES---");
       const companies = pull(text, "---CSV_COMPANIES---", "---CSV_PEOPLE---");
       const people = text.split("---CSV_PEOPLE---")[1]?.trim();
       setFinal({ md, json, companies, people });
@@ -31,8 +39,12 @@ export default function Page() {
     } else {
       setHistory(h => [...h, { role: "assistant", content: text }]);
     }
-    setBusy(false);
+  } catch (err: any) {
+    setHistory(h => [...h, { role: "assistant", content: `Network error: ${err?.message || err}` }]);
   }
+  setBusy(false);
+}
+
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
