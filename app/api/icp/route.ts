@@ -126,20 +126,27 @@ export async function POST(req: NextRequest) {
     }
 
     // Finalize
-    const resp = await client.responses.create({
-      model: "gpt-5", // or another model on your account that supports json_schema
-      temperature: 0.2,
-      input: [
-        { role: "system", content: SYSTEM },
-        ...history,
-        { role: "user", content: "Finalize" }
-      ],
-      response_format: { type: "json_schema", json_schema: icpJsonSchema }
-    });
+// --- Finalize branch ---
+const body: any = {
+  model: "gpt-4o",
+  temperature: 0.2,
+  input: [
+    { role: "system", content: SYSTEM },
+    ...history,
+    { role: "user", content: "Finalize" }
+  ],
+  response_format: { type: "json_schema", json_schema: icpJsonSchema }
+};
+// @ts-expect-error - response_format may not exist in installed SDK types
+const resp = await (client.responses as any).create(body as any);
+const text =
+  (resp as any).output_text ||
+  flattenResponse(resp) ||
+  "No finalize text returned; please try again.";
+return ok({ text });
+  
 
-    const text = resp.output_text || flattenResponse(resp) || "No finalize text returned; please try again.";
-    return ok({ text });
-  } catch (e: any) {
+ 
     return err(e?.message || "Unknown error from API route");
   }
 }
