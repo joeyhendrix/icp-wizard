@@ -52,6 +52,9 @@ export default function Page() {
             <b>{m.role === "assistant" ? "Assistant" : "You"}:</b> {m.content}
           </div>
         ))}
+        {busy && (
+    <div className="text-gray-500 italic">Assistant is thinking…</div>
+  )}
       </div>
 
       <form onSubmit={onSubmit} className="flex gap-2 mt-3">
