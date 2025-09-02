@@ -4,6 +4,25 @@ import OpenAI from "openai";
 export const runtime = "nodejs";
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
+const SYSTEM = `
+You are an ICP Discovery Assistant running on a public web page.
+Ask one question at a time. Be concise. Confirm multi-part answers and move forward.
+When all fields are reasonably populated, say "I am ready to finalize."
+When the user says "Finalize", return ONLY these sections in this order:
+
+---MARKDOWN---
+<concise, client-ready narrative summary>
+
+---JSON---
+<valid JSON matching schema>
+
+---CSV_COMPANIES---
+company_name,domain,industry,employee_count,revenue_range,geo,notes
+
+---CSV_PEOPLE---
+first_name,last_name,title,seniority,department,company_name,company_domain,geo,linkedin_url,email,phone,notes
+`;
+
 const icpJsonSchema = {
   name: "ICP",
   schema: {
@@ -69,45 +88,74 @@ const icpJsonSchema = {
   strict: true
 };
 
-const SYSTEM = `
-You are an ICP Discovery Assistant running on a public web page.
-Ask one question at a time. Be concise. Confirm multi-part answers and move forward.
-When all fields are reasonably populated, say "I am ready to finalize."
-When the user says "Finalize", return ONLY these sections in this order:
-
----MARKDOWN---
-<concise, client-ready narrative summary>
-
----JSON---
-<valid JSON matching schema>
-
----CSV_COMPANIES---
-company_name,domain,industry,employee_count,revenue_range,geo,notes
-
----CSV_PEOPLE---
-first_name,last_name,title,seniority,department,company_name,company_domain,geo,linkedin_url,email,phone,notes
-`;
-
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { history = [], finalize = false } = body;
+    const { history = [], finalize = false } = await req.json();
 
-    const base: any = {
-      model: "gpt-5",
-      input: [{ role: "system", content: SYSTEM }, ...history],
-      temperature: 0.2
-    };
-
-    if (finalize) {
-      base.response_format = { type: "json_schema", json_schema: icpJsonSchema };
-      base.input.push({ role: "user", content: "Finalize" });
+    if (!process.env.OPENAI_API_KEY) {
+      return respErr("OPENAI_API_KEY is not set on the server");
     }
 
-    const resp = await client.responses.create(base);
-    const text = resp.output_text || "";
-    return new Response(JSON.stringify({ text }), { headers: { "Content-Type": "application/json" } });
+    if (!finalize) {
+      // INTERVIEW TURNS: Chat Completions for reliability
+      const chat = await client.chat.completions.create({
+        model: "gpt-4o",
+        temperature: 0.2,
+        messages: [
+          { role: "system", content: SYSTEM },
+          ...history.map((m: any) => ({
+            role: m.role as "user" | "assistant",
+            content: m.content
+          }))
+        ]
+      });
+
+      const text =
+        chat.choices?.[0]?.message?.content?.toString().trim() ||
+        "I didn’t get a response. Please try again.";
+      return respOk({ text });
+    }
+
+    // FINALIZE: Responses + JSON schema enforcement
+    const resp = await client.responses.create({
+      model: "gpt-5",
+      temperature: 0.2,
+      input: [{ role: "system", content: SYSTEM }, ...history, { role: "user", content: "Finalize" }],
+      response_format: { type: "json_schema", json_schema: icpJsonSchema }
+    });
+
+    const text =
+      resp.output_text ||
+      flattenResponse(resp) ||
+      "No finalize text returned; please try again.";
+
+    return respOk({ text });
   } catch (e: any) {
-    return new Response(JSON.stringify({ error: e.message || "Error" }), { status: 500 });
+    return respErr(e?.message || "Unknown error from API route");
+  }
+}
+
+function respOk(data: any) {
+  return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
+}
+function respErr(message: string, status = 500) {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { "Content-Type": "application/json" }
+  });
+}
+function flattenResponse(resp: any): string {
+  try {
+    if (!resp?.output) return "";
+    return resp.output
+      .map((item: any) =>
+        item?.content
+          ?.map((c: any) => c?.text?.value || "")
+          .join("")
+      )
+      .join("")
+      .trim();
+  } catch {
+    return "";
   }
 }
