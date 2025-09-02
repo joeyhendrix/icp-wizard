@@ -11,7 +11,7 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [final, setFinal] = useState<{ md?: string; json?: string; companies?: string; people?: string }>({});
 
-  async function send(finalize = false) {
+async function send(finalize = false) {
   if (busy) return;
   setBusy(true);
   try {
@@ -30,10 +30,10 @@ export default function Page() {
 
     const text = data.text || "";
     if (finalize) {
-      const md = pull(text, "---MARKDOWN---",      "---JSON---");
-      const json = pull(text, "---JSON---",          "---CSV_COMPANIES---");
+      const md        = pull(text, "---MARKDOWN---",      "---JSON---");
+      const json      = pull(text, "---JSON---",          "---CSV_COMPANIES---");
       const companies = pull(text, "---CSV_COMPANIES---", "---CSV_PEOPLE---");
-      const people = text.split("---CSV_PEOPLE---")[1]?.trim();
+      const people    = text.split("---CSV_PEOPLE---")[1]?.trim();
       setFinal({ md, json, companies, people });
       setHistory(h => [...h, { role: "assistant", content: "Done. Scroll down for your summary and files." }]);
     } else {
@@ -44,6 +44,7 @@ export default function Page() {
   }
   setBusy(false);
 }
+
 
 
   function onSubmit(e: React.FormEvent) {
@@ -64,9 +65,7 @@ export default function Page() {
             <b>{m.role === "assistant" ? "Assistant" : "You"}:</b> {m.content}
           </div>
         ))}
-        {busy && (
-    <div className="text-gray-500 italic">Assistant is thinking…</div>
-  )}
+        {busy && <div className="text-gray-500 italic">Assistant is thinking…</div>}
       </div>
 
       <form onSubmit={onSubmit} className="flex gap-2 mt-3">
