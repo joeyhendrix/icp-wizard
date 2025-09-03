@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
 
     // Finalize
 // --- Finalize branch ---
-const body: any = {
+const body = {
   model: "gpt-4o",
   temperature: 0.2,
   input: [
@@ -136,14 +136,19 @@ const body: any = {
     { role: "user", content: "Finalize" }
   ],
   response_format: { type: "json_schema", json_schema: icpJsonSchema }
-};
-// @ts-expect-error - response_format may not exist in installed SDK types
-const resp = await (client.responses as any).create(body as any);
+} as any;
+
+// Some SDK versions don’t type `response_format` yet.
+// @ts-expect-error - suppress until SDK typing catches up
+const resp = await (client.responses as any).create(body);
+
 const text =
   (resp as any).output_text ||
   flattenResponse(resp) ||
   "No finalize text returned; please try again.";
+
 return ok({ text });
+
   
 
  
